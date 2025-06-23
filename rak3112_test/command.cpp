@@ -20,7 +20,7 @@ bool register_at_handler(const char *cmd, AT_Handler handler, const char *help) 
 
 // 初始化时注册
 void init_default_handlers() {
-    register_at_handler("AT", handle_at, "AT Test 2025/2/14");
+    register_at_handler("AT", handle_at, "AT Test " __DATE__ " " __TIME__);
 }
 
 
