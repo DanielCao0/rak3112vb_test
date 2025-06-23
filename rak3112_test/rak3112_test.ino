@@ -17,6 +17,8 @@
 #include "lora.h"
 #include "ble.h"
 
+
+
 void wifiScan(void);
 void handle_at_wifiscan(const AT_Command *cmd)
 {

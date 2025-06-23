@@ -26,8 +26,13 @@ SX1262 radio = new Module(RADIO_CS_PIN, RADIO_DIO1_PIN, RADIO_RST_PIN, RADIO_BUS
 static int transmissionState = RADIOLIB_ERR_NONE;
 // flag to indicate that a packet was sent
 static volatile bool transmittedFlag = false;
+static volatile bool receivedFlag = false;
 static uint32_t counter = 0;
 static String payload;
+
+static String rssi = "0dBm";
+static String snr = "0dB";
+
 
 float g_lora_freq = CONFIG_RADIO_FREQ;
 int g_lora_sf = 10;
@@ -42,6 +47,7 @@ void setFlag(void)
 {
     // we sent a packet, set the flag
     transmittedFlag = true;
+    receivedFlag = true;
 }
 
 
@@ -57,6 +63,8 @@ void init_lora_radio() {
     register_at_handler("AT+CW", handle_at_cw, "Start LoRa continuous wave (single carrier)");
     register_at_handler("AT+CWSTOP", handle_at_cw_stop, "Stop LoRa continuous wave (single carrier)");
     register_at_handler("AT+PREAMBLE", handle_at_preamble, "Set LoRa preamble length, e.g. AT+PREAMBLE=8");
+    register_at_handler("AT+RX", handle_at_rx, "Start LoRa receive mode, e.g. AT+RX");
+    register_at_handler("AT+RXSTOP", handle_at_rx_stop, "Stop LoRa receive mode, e.g. AT+RXSTOP");
 
     // initialize radio with default settings
     int state = radio.begin();
@@ -73,6 +81,7 @@ void init_lora_radio() {
     // set the function that will be called
     // when packet transmission is finished
     radio.setPacketSentAction(setFlag);
+    radio.setPacketReceivedAction(setFlag);
 
     if (radio.setFrequency(g_lora_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
         Serial.println(F("Selected frequency is invalid for this module!"));
@@ -228,3 +237,69 @@ void handle_at_preamble(const AT_Command *cmd) {
     }
 }
 
+
+void receive_packet() {
+    if (receivedFlag) {
+
+        // reset flag
+        receivedFlag = false;
+
+        // you can read received data as an Arduino String
+        int state = radio.readData(payload);
+
+        // you can also read received data as byte array
+        /*
+          byte byteArr[8];
+          int state = radio.readData(byteArr, 8);
+        */
+
+        if (state == RADIOLIB_ERR_NONE) {
+
+            rssi = String(radio.getRSSI()) + "dBm";
+            snr = String(radio.getSNR()) + "dB";
+
+            // packet was successfully received
+            Serial.println(F("Radio Received packet!"));
+
+            // print data of the packet
+            Serial.print(F("Radio Data:\t\t"));
+            Serial.println(payload);
+
+            // print RSSI (Received Signal Strength Indicator)
+            Serial.print(F("Radio RSSI:\t\t"));
+            Serial.println(rssi);
+
+            // print SNR (Signal-to-Noise Ratio)
+            Serial.print(F("Radio SNR:\t\t"));
+            Serial.println(snr);
+
+        } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
+            // packet was received, but is malformed
+            Serial.println(F("CRC error!"));
+        } else {
+            // some other error occurred
+            Serial.print(F("failed, code "));
+            Serial.println(state);
+        }
+
+        // put module back to listen mode
+        radio.startReceive();
+
+    }
+}
+
+void handle_at_rx(const AT_Command *cmd) {
+    Serial.print(F("Radio Starting to listen ... "));
+    int state = radio.startReceive();
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println(F("success!"));
+    } else {
+        Serial.print(F("failed, code "));
+        Serial.println(state);
+    }
+}
+
+void handle_at_rx_stop(const AT_Command *cmd) {
+    radio.standby();
+    Serial.println("LoRa RX mode stopped.");
+}
