@@ -15,59 +15,66 @@
 #include "WiFi.h"
 #include "command.h"
 #include "lora.h"
+#include "ble.h"
 
 void wifiScan(void);
-
-void setupBoards( void )
+void handle_at_wifiscan(const AT_Command *cmd)
 {
-    Serial.begin(115200);
-    delay(3000);
- 
-    Serial.println("setupBoards");
-
-    // RF Switch enable pin
-    pinMode(4, OUTPUT);
-    digitalWrite(4, HIGH);
-
-    SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
-
-    Serial.println("init done .");
-
-    // Set WiFi to station mode and disconnect from an AP if it was previously connected.
-    WiFi.mode(WIFI_STA);
-    WiFi.disconnect();
-    delay(100);
-
-    // wifiScan();
+  wifiScan();
 }
 
+void setupBoards(void)
+{
+  Serial.begin(115200);
+
+  Serial.println("setupBoards");
+
+  // RF Switch enable pin
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+
+  SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
+
+  Serial.println("init done .");
+
+  // Set WiFi to station mode and disconnect from an AP if it was previously connected.
+  // WiFi.mode(WIFI_STA);
+  // WiFi.disconnect();
+  // delay(100);
+  // register_at_handler("AT+WIFISCAN", handle_at_wifiscan, "Scan WiFi networks");
+}
 
 void setup()
 {
-    setupBoards();
-    init_lora_radio();
-    command_init();
+  setupBoards();
+  init_lora_radio();
+  command_init();
+  ble_init();
 }
 
 void loop()
 {
-    delay(10);
+  delay(10);
 }
 
-
-void wifiScan() {
+void wifiScan()
+{
   Serial.println("Scan start");
 
   // WiFi.scanNetworks will return the number of networks found.
   int n = WiFi.scanNetworks();
   Serial.println("Scan done");
-  if (n == 0) {
+  if (n == 0)
+  {
     Serial.println("no networks found");
-  } else {
+  }
+  else
+  {
     Serial.print(n);
     Serial.println(" networks found");
     Serial.println("Nr | SSID                             | RSSI | CH | Encryption");
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < n; ++i)
+    {
       // Print SSID and RSSI for each network found
       Serial.printf("%2d", i + 1);
       Serial.print(" | ");
@@ -77,17 +84,37 @@ void wifiScan() {
       Serial.print(" | ");
       Serial.printf("%2ld", WiFi.channel(i));
       Serial.print(" | ");
-      switch (WiFi.encryptionType(i)) {
-        case WIFI_AUTH_OPEN:            Serial.print("open"); break;
-        case WIFI_AUTH_WEP:             Serial.print("WEP"); break;
-        case WIFI_AUTH_WPA_PSK:         Serial.print("WPA"); break;
-        case WIFI_AUTH_WPA2_PSK:        Serial.print("WPA2"); break;
-        case WIFI_AUTH_WPA_WPA2_PSK:    Serial.print("WPA+WPA2"); break;
-        case WIFI_AUTH_WPA2_ENTERPRISE: Serial.print("WPA2-EAP"); break;
-        case WIFI_AUTH_WPA3_PSK:        Serial.print("WPA3"); break;
-        case WIFI_AUTH_WPA2_WPA3_PSK:   Serial.print("WPA2+WPA3"); break;
-        case WIFI_AUTH_WAPI_PSK:        Serial.print("WAPI"); break;
-        default:                        Serial.print("unknown");
+      switch (WiFi.encryptionType(i))
+      {
+      case WIFI_AUTH_OPEN:
+        Serial.print("open");
+        break;
+      case WIFI_AUTH_WEP:
+        Serial.print("WEP");
+        break;
+      case WIFI_AUTH_WPA_PSK:
+        Serial.print("WPA");
+        break;
+      case WIFI_AUTH_WPA2_PSK:
+        Serial.print("WPA2");
+        break;
+      case WIFI_AUTH_WPA_WPA2_PSK:
+        Serial.print("WPA+WPA2");
+        break;
+      case WIFI_AUTH_WPA2_ENTERPRISE:
+        Serial.print("WPA2-EAP");
+        break;
+      case WIFI_AUTH_WPA3_PSK:
+        Serial.print("WPA3");
+        break;
+      case WIFI_AUTH_WPA2_WPA3_PSK:
+        Serial.print("WPA2+WPA3");
+        break;
+      case WIFI_AUTH_WAPI_PSK:
+        Serial.print("WAPI");
+        break;
+      default:
+        Serial.print("unknown");
       }
       Serial.println();
       delay(10);
@@ -101,4 +128,6 @@ void wifiScan() {
   // // Wait a bit before scanning again.
   // delay(5000);
 }
+
+
 

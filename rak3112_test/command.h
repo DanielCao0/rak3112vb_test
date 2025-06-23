@@ -2,6 +2,7 @@
 #ifndef COMMAND_H
 #define COMMAND_H
 
+#include <stdbool.h>
 
 #define MAX_CMD_LEN 64
 #define MAX_PARAM_LEN 256

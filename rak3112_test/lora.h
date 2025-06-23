@@ -10,5 +10,5 @@ void handle_at_power(const AT_Command *cmd);
 void handle_at_send(const AT_Command *cmd);
 void handle_at_cw(const AT_Command *cmd);
 void handle_at_cw_stop(const AT_Command *cmd);
-
+void handle_at_preamble(const AT_Command *cmd);
 #endif // LORA_H

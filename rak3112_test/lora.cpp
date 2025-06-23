@@ -32,6 +32,7 @@ static String payload;
 float g_lora_freq = CONFIG_RADIO_FREQ;
 int g_lora_sf = 10;
 int g_lora_power = CONFIG_RADIO_OUTPUT_POWER;
+int g_lora_preamble = 8; // add global variable
 
 // this function is called when a complete packet
 // is transmitted by the module
@@ -55,6 +56,7 @@ void init_lora_radio() {
     register_at_handler("AT+SEND", handle_at_send, "Send data, e.g. AT+SEND=hello");
     register_at_handler("AT+CW", handle_at_cw, "Start LoRa continuous wave (single carrier)");
     register_at_handler("AT+CWSTOP", handle_at_cw_stop, "Stop LoRa continuous wave (single carrier)");
+    register_at_handler("AT+PREAMBLE", handle_at_preamble, "Set LoRa preamble length, e.g. AT+PREAMBLE=8");
 
     // initialize radio with default settings
     int state = radio.begin();
@@ -109,7 +111,7 @@ void init_lora_radio() {
     }
 #endif
 
-    if (radio.setPreambleLength(8) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
+    if (radio.setPreambleLength(g_lora_preamble) == RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH) {
         Serial.println(F("Selected preamble length is invalid for this module!"));
         while (true);
     }
@@ -209,5 +211,20 @@ void handle_at_cw(const AT_Command *cmd) {
 void handle_at_cw_stop(const AT_Command *cmd) {
     radio.standby();
     Serial.println("CW mode stopped.");
+}
+
+void handle_at_preamble(const AT_Command *cmd) {
+    int preamble = atoi(cmd->params);
+    if (preamble >= 6 && preamble <= 65535) { // SX1262支持的范围
+        g_lora_preamble = preamble;
+        if (radio.setPreambleLength(g_lora_preamble) == RADIOLIB_ERR_NONE) {
+            Serial.print("OK, PREAMBLE=");
+            Serial.println(g_lora_preamble);
+        } else {
+            Serial.println("ERROR: Failed to set preamble length");
+        }
+    } else {
+        Serial.println("ERROR: Invalid PREAMBLE");
+    }
 }
 

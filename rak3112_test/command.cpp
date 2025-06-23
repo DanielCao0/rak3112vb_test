@@ -103,27 +103,29 @@ AT_Command parse_AT_Command(const char *input)
 
 void process_AT_Command(const char *input)
 {
-	AT_Command cmd = parse_AT_Command(input);
+    AT_Command cmd = parse_AT_Command(input);
 
-	//  start fix Hit Enter to return AT_ERROR
-	if (strlen(cmd.cmd) == 0) // When the length of the AT command is 0, no processing is performed.
-	{
-		Serial.print("\r\n");
-		return;
-	}
-	//  end fix Hit Enter to return AT_ERROR
+    if (strlen(cmd.cmd) == 0)
+    {
+        Serial.print("\r\n");
+        return;
+    }
 
-	int num_handlers = sizeof(handler_table) / sizeof(handler_table[0]);
-	for (int i = 0; i < num_handlers; i++)
-	{
-		if (strcasecmp(cmd.cmd, handler_table[i].cmd) == 0)
-		{
-			Serial.print("\r\n"); // Add \r\n before returning the result of the AT command.
-			handler_table[i].handler(&cmd);
-			return;
-		}
-	}
-	Serial.print("AT_ERROR\r\n");
+    int num_handlers = handler_table_size; // 只遍历已注册的handler
+    for (int i = 0; i < num_handlers; i++)
+    {
+        if (strcasecmp(cmd.cmd, handler_table[i].cmd) == 0)
+        {
+            Serial.print("\r\n");
+            if (handler_table[i].handler) {
+                handler_table[i].handler(&cmd);
+            } else {
+                Serial.print("AT_ERROR: Handler is NULL\r\n");
+            }
+            return;
+        }
+    }
+    Serial.print("AT_ERROR\r\n");
 }
 
 void handle_at(const AT_Command *cmd)
@@ -140,7 +142,7 @@ void command_init()
         "atCmd",  /* String with name of task. */
         4 * 1024, /* Stack size in bytes. */
         NULL,     /* Parameter passed as input of the task */
-        0,        /* Priority of the task. */
+        1,        /* Priority of the task. */
         NULL);
 }
 
