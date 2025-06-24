@@ -140,7 +140,7 @@ void command_init()
     xTaskCreate(
         atCmd,    /* Task function. */
         "atCmd",  /* String with name of task. */
-        4 * 1024, /* Stack size in bytes. */
+        50 * 1024, /* Stack size in bytes. */
         NULL,     /* Parameter passed as input of the task */
         1,        /* Priority of the task. */
         NULL);

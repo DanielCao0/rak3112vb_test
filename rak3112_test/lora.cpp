@@ -67,6 +67,7 @@ void init_lora_radio() {
     register_at_handler("AT+CW", handle_at_cw, "Start LoRa continuous wave (single carrier)");
     register_at_handler("AT+CWSTOP", handle_at_cw_stop, "Stop LoRa continuous wave (single carrier)");
     register_at_handler("AT+PPL", handle_at_preamble, "Set LoRa preamble length, e.g. AT+PREAMBLE=8");
+    register_at_handler("AT+PPREAMBLE", handle_at_preamble, "Set LoRa preamble length, e.g. AT+PPREAMBLE=8");
     register_at_handler("AT+PRECV", handle_at_rx, "Start LoRa receive mode, e.g. AT+RX");
     register_at_handler("AT+RXSTOP", handle_at_rx_stop, "Stop LoRa receive mode, e.g. AT+RXSTOP");
 

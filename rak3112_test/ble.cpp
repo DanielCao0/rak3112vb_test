@@ -106,12 +106,13 @@ void handle_at_blescan(const AT_Command *cmd) {
     Serial.println("BLE scan start");
     BLEScanResults* foundDevices = pBLEScan->start(scanTime, false);
     int count = foundDevices->getCount();
-    // Serial.printf("BLE scan done, found %d devices\n", count);
     for (int i = 0; i < count; ++i) {
         BLEAdvertisedDevice device = foundDevices->getDevice(i);
-        String name = device.haveName() ? device.getName().c_str() : "(no name)";
-        int rssi = device.getRSSI();
-        Serial.printf("Device %2d: Name: %s | RSSI: %d\n", i + 1, name.c_str(), rssi);
+        if (device.haveName()) {
+            String name = device.getName().c_str();
+            int rssi = device.getRSSI();
+            Serial.printf("Device %2d: Name: %s | RSSI: %d\n", i + 1, name.c_str(), rssi);
+        }
     }
     pBLEScan->clearResults(); // Free memory
 }
