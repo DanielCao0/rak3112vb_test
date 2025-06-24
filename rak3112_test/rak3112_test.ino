@@ -39,11 +39,11 @@ void setupBoards(void)
 
   Serial.println("init done .");
 
-  // Set WiFi to station mode and disconnect from an AP if it was previously connected.
-  // WiFi.mode(WIFI_STA);
-  // WiFi.disconnect();
-  // delay(100);
-  // register_at_handler("AT+WIFISCAN", handle_at_wifiscan, "Scan WiFi networks");
+  //Set WiFi to station mode and disconnect from an AP if it was previously connected.
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+  register_at_handler("AT+WIFISCAN", handle_at_wifiscan, "Scan WiFi networks");
 }
 
 void setup()
