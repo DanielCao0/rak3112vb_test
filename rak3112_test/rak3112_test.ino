@@ -57,6 +57,7 @@ void setup()
 void loop()
 {
   delay(10);
+  receive_packet();
 }
 
 void wifiScan()

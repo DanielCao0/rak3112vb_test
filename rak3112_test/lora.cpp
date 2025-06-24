@@ -43,10 +43,14 @@ int g_lora_preamble = 8; // add global variable
 // is transmitted by the module
 // IMPORTANT: this function MUST be 'void' type
 //            and MUST NOT have any arguments!
-void setFlag(void)
+void setTXFlag(void)
 {
     // we sent a packet, set the flag
     transmittedFlag = true;
+}
+
+void setRXFlag(void)
+{
     receivedFlag = true;
 }
 
@@ -56,14 +60,14 @@ void init_lora_radio() {
     // When the power is turned on, a delay is required.
     delay(1500);
 
-    register_at_handler("AT+FREQ", handle_at_freq, "Set LoRa frequency, e.g. AT+FREQ=868.0");
-    register_at_handler("AT+SF", handle_at_sf, "Set LoRa spreading factor, e.g. AT+SF=10");
-    register_at_handler("AT+POWER", handle_at_power, "Set LoRa output power, e.g. AT+POWER=22");
-    register_at_handler("AT+SEND", handle_at_send, "Send data, e.g. AT+SEND=hello");
+    register_at_handler("AT+PFREQ", handle_at_freq, "Set LoRa frequency, e.g. AT+FREQ=868.0");
+    register_at_handler("AT+PSF", handle_at_sf, "Set LoRa spreading factor, e.g. AT+SF=10");
+    register_at_handler("AT+PTP", handle_at_power, "Set LoRa output power, e.g. AT+POWER=22");
+    register_at_handler("AT+PSEND", handle_at_send, "Send data, e.g. AT+SEND=hello");
     register_at_handler("AT+CW", handle_at_cw, "Start LoRa continuous wave (single carrier)");
     register_at_handler("AT+CWSTOP", handle_at_cw_stop, "Stop LoRa continuous wave (single carrier)");
-    register_at_handler("AT+PREAMBLE", handle_at_preamble, "Set LoRa preamble length, e.g. AT+PREAMBLE=8");
-    register_at_handler("AT+RX", handle_at_rx, "Start LoRa receive mode, e.g. AT+RX");
+    register_at_handler("AT+PPL", handle_at_preamble, "Set LoRa preamble length, e.g. AT+PREAMBLE=8");
+    register_at_handler("AT+PRECV", handle_at_rx, "Start LoRa receive mode, e.g. AT+RX");
     register_at_handler("AT+RXSTOP", handle_at_rx_stop, "Stop LoRa receive mode, e.g. AT+RXSTOP");
 
     // initialize radio with default settings
@@ -80,8 +84,8 @@ void init_lora_radio() {
 
     // set the function that will be called
     // when packet transmission is finished
-    radio.setPacketSentAction(setFlag);
-    radio.setPacketReceivedAction(setFlag);
+    radio.setPacketSentAction(setTXFlag);
+    radio.setPacketReceivedAction(setRXFlag);
 
     if (radio.setFrequency(g_lora_freq) == RADIOLIB_ERR_INVALID_FREQUENCY) {
         Serial.println(F("Selected frequency is invalid for this module!"));
@@ -146,19 +150,36 @@ void init_lora_radio() {
     // delay(1000);
 }
 
+// Add LoRa busy state
+volatile enum LoraState {
+    LORA_IDLE = 0,
+    LORA_CW,
+    LORA_RX
+} lora_state = LORA_IDLE;
+
 void handle_at_freq(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current FREQ: ");
+        Serial.println(g_lora_freq, 3);
+        return;
+    }
     float freq = atof(cmd->params);
     if (freq >= 137.0 && freq <= 960.0) {
         g_lora_freq = freq;
         radio.setFrequency(g_lora_freq);
         Serial.print("OK, FREQ=");
-        Serial.println(g_lora_freq);
+        Serial.println(g_lora_freq, 3);
     } else {
         Serial.println("ERROR: Invalid FREQ");
     }
 }
 
 void handle_at_sf(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current SF: ");
+        Serial.println(g_lora_sf);
+        return;
+    }
     int sf = atoi(cmd->params);
     if (sf >= 5 && sf <= 12) {
         g_lora_sf = sf;
@@ -171,6 +192,11 @@ void handle_at_sf(const AT_Command *cmd) {
 }
 
 void handle_at_power(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current POWER: ");
+        Serial.println(g_lora_power);
+        return;
+    }
     int power = atoi(cmd->params);
     if (power >= -9 && power <= 22) {
         g_lora_power = power;
@@ -183,33 +209,80 @@ void handle_at_power(const AT_Command *cmd) {
 }
 
 void handle_at_send(const AT_Command *cmd) {
+    if (lora_state == LORA_CW) {
+        Serial.println("ERROR: Device busy (CW mode)");
+        return;
+    }
+    if (lora_state == LORA_RX) {
+        Serial.println("ERROR: Device busy (RX mode)");
+        return;
+    }
     if (strlen(cmd->params) == 0) {
         Serial.println("ERROR: No data to send");
         return;
     }
-    transmittedFlag = false; // 清除标志
-    int state = radio.startTransmit(cmd->params);
-    if (state == RADIOLIB_ERR_NONE) {
-        Serial.println("OK, sending...");
-        // 等待发送完成
-        unsigned long start = millis();
-        while (!transmittedFlag && millis() - start < 5000) { // 最多等5秒
-            delay(1);
+    // Check if input is hex string (only 0-9, a-f, A-F, even length)
+    const char* p = cmd->params;
+    int len = strlen(p);
+    bool isHex = (len % 2 == 0);
+    for (int i = 0; i < len && isHex; ++i) {
+        if (!isxdigit(p[i])) isHex = false;
+    }
+    if (isHex) {
+        // Convert hex string to byte array
+        int byteLen = len / 2;
+        uint8_t buf[128];
+        if (byteLen > 128) {
+            Serial.println("ERROR: Data too long");
+            return;
         }
-        if (transmittedFlag) {
-            Serial.println("SEND DONE");
+        for (int i = 0; i < byteLen; ++i) {
+            char tmp[3] = {p[2*i], p[2*i+1], 0};
+            buf[i] = (uint8_t)strtol(tmp, NULL, 16);
+        }
+        transmittedFlag = false;
+        int state = radio.startTransmit(buf, byteLen);
+        if (state == RADIOLIB_ERR_NONE) {
+            Serial.println("OK, sending HEX...");
+            unsigned long start = millis();
+            while (!transmittedFlag && millis() - start < 5000) {
+                delay(1);
+            }
+            if (transmittedFlag) {
+                Serial.println("SEND DONE");
+            } else {
+                Serial.println("ERROR: Timeout waiting for TX done");
+            }
         } else {
-            Serial.println("ERROR: Timeout waiting for TX done");
+            Serial.print("ERROR, code ");
+            Serial.println(state);
         }
     } else {
-        Serial.print("ERROR, code ");
-        Serial.println(state);
+        // Fallback: send as string
+        transmittedFlag = false;
+        int state = radio.startTransmit(cmd->params);
+        if (state == RADIOLIB_ERR_NONE) {
+            Serial.println("OK, sending...");
+            unsigned long start = millis();
+            while (!transmittedFlag && millis() - start < 5000) {
+                delay(1);
+            }
+            if (transmittedFlag) {
+                Serial.println("SEND DONE");
+            } else {
+                Serial.println("ERROR: Timeout waiting for TX done");
+            }
+        } else {
+            Serial.print("ERROR, code ");
+            Serial.println(state);
+        }
     }
 }
 
 void handle_at_cw(const AT_Command *cmd) {
     int state = radio.transmitDirect();
     if (state == RADIOLIB_ERR_NONE) {
+        lora_state = LORA_CW;
         Serial.println("CW mode started.");
     } else {
         Serial.print("ERROR, code ");
@@ -219,12 +292,18 @@ void handle_at_cw(const AT_Command *cmd) {
 
 void handle_at_cw_stop(const AT_Command *cmd) {
     radio.standby();
+    lora_state = LORA_IDLE;
     Serial.println("CW mode stopped.");
 }
 
 void handle_at_preamble(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current PREAMBLE: ");
+        Serial.println(g_lora_preamble);
+        return;
+    }
     int preamble = atoi(cmd->params);
-    if (preamble >= 6 && preamble <= 65535) { // SX1262支持的范围
+    if (preamble >= 6 && preamble <= 65535) {
         g_lora_preamble = preamble;
         if (radio.setPreambleLength(g_lora_preamble) == RADIOLIB_ERR_NONE) {
             Serial.print("OK, PREAMBLE=");
@@ -244,40 +323,31 @@ void receive_packet() {
         // reset flag
         receivedFlag = false;
 
-        // you can read received data as an Arduino String
-        int state = radio.readData(payload);
-
-        // you can also read received data as byte array
-        /*
-          byte byteArr[8];
-          int state = radio.readData(byteArr, 8);
-        */
+        // read received data as byte array
+        uint8_t byteArr[256];
+        int len = radio.getPacketLength();
+        int state = radio.readData(byteArr, len);
 
         if (state == RADIOLIB_ERR_NONE) {
-
             rssi = String(radio.getRSSI()) + "dBm";
             snr = String(radio.getSNR()) + "dB";
 
-            // packet was successfully received
             Serial.println(F("Radio Received packet!"));
+            Serial.print(F("Radio Data (HEX):"));
+            for (int i = 0; i < len; i++) {
+                if (byteArr[i] < 16) Serial.print("0");
+                Serial.print(byteArr[i], HEX);
+                Serial.print(" ");
+            }
+            Serial.println();
 
-            // print data of the packet
-            Serial.print(F("Radio Data:\t\t"));
-            Serial.println(payload);
-
-            // print RSSI (Received Signal Strength Indicator)
-            Serial.print(F("Radio RSSI:\t\t"));
+            Serial.print(F("Radio RSSI:"));
             Serial.println(rssi);
-
-            // print SNR (Signal-to-Noise Ratio)
-            Serial.print(F("Radio SNR:\t\t"));
+            Serial.print(F("Radio SNR:"));
             Serial.println(snr);
-
         } else if (state == RADIOLIB_ERR_CRC_MISMATCH) {
-            // packet was received, but is malformed
             Serial.println(F("CRC error!"));
         } else {
-            // some other error occurred
             Serial.print(F("failed, code "));
             Serial.println(state);
         }
@@ -292,6 +362,7 @@ void handle_at_rx(const AT_Command *cmd) {
     Serial.print(F("Radio Starting to listen ... "));
     int state = radio.startReceive();
     if (state == RADIOLIB_ERR_NONE) {
+        lora_state = LORA_RX;
         Serial.println(F("success!"));
     } else {
         Serial.print(F("failed, code "));
@@ -301,5 +372,6 @@ void handle_at_rx(const AT_Command *cmd) {
 
 void handle_at_rx_stop(const AT_Command *cmd) {
     radio.standby();
+    lora_state = LORA_IDLE;
     Serial.println("LoRa RX mode stopped.");
 }

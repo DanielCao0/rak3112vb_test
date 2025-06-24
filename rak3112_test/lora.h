@@ -13,4 +13,5 @@ void handle_at_cw_stop(const AT_Command *cmd);
 void handle_at_preamble(const AT_Command *cmd);
 void handle_at_rx_stop(const AT_Command *cmd);
 void handle_at_rx(const AT_Command *cmd);
+void receive_packet();
 #endif // LORA_H
