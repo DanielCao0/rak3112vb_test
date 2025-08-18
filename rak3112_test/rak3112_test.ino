@@ -58,6 +58,7 @@ void loop()
 {
   delay(10);
   receive_packet();
+  fhss_auto_hop_send_loop();
 }
 
 void wifiScan()

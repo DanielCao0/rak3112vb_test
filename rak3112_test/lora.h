@@ -14,4 +14,12 @@ void handle_at_preamble(const AT_Command *cmd);
 void handle_at_rx_stop(const AT_Command *cmd);
 void handle_at_rx(const AT_Command *cmd);
 void receive_packet();
+#ifdef __cplusplus
+extern "C" {
+#endif
+void fhss_auto_hop_send_loop();
+#ifdef __cplusplus
+}
+#endif
+
 #endif // LORA_H

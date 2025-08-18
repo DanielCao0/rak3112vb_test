@@ -35,4 +35,6 @@ void handle_at(const AT_Command *cmd);
 void command_init();
 bool register_at_handler(const char *cmd, AT_Handler handler, const char *help);
 
+void handle_at_fhset(const AT_Command *cmd);
+
 #endif // COMMAND_H
