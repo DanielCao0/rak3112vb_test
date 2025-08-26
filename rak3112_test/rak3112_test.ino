@@ -16,7 +16,21 @@
 #include "command.h"
 #include "lora.h"
 #include "ble.h"
+#include "rak1904.h"
+#include <U8g2lib.h>	
+#include "l76k.h"
 
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
+
+
+void init_rak1921()
+{
+  u8g2.begin();
+  u8g2.clearBuffer();                    // clear the internal memory
+  u8g2.setFont(u8g2_font_ncenB14_tr);    // choose a larger font
+  u8g2.drawStr(0, 16, "RAK1921");  // write something to the display
+  u8g2.sendBuffer();                     // transfer internal memory to the display
+}
 
 
 void wifiScan(void);
@@ -34,6 +48,9 @@ void setupBoards(void)
   // RF Switch enable pin
   pinMode(4, OUTPUT);
   digitalWrite(4, HIGH);
+  
+  pinMode(14 , OUTPUT);
+  digitalWrite(14 , HIGH);
 
   SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
 
@@ -44,21 +61,29 @@ void setupBoards(void)
   WiFi.disconnect();
   delay(100);
   register_at_handler("AT+WIFISCAN", handle_at_wifiscan, "Scan WiFi networks");
+
+  // esp_log_level_set("*", ESP_LOG_ERROR);          // 只显示错误级别
+  esp_log_level_set("i2c.master", ESP_LOG_NONE);  // 完全关闭I2C日志
 }
 
 void setup()
 {
   setupBoards();
   init_lora_radio();
-  command_init();
-  ble_init();
+  init_command();
+  init_ble();
+  init_rak1904();  // Initialize RAK1904 accelerometer
+  init_rak1921();
+  init_gps();
 }
+
 
 void loop()
 {
-  delay(10);
   receive_packet();
   fhss_auto_hop_send_loop();
+  gpsParseDate();
+  delay(10);
 }
 
 void wifiScan()

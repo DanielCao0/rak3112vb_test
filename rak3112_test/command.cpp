@@ -134,7 +134,7 @@ void handle_at(const AT_Command *cmd)
 	Serial.print("OK\r\n");
 }
 
-void command_init()
+void init_command()
 {
 	init_default_handlers();
     xTaskCreate(

@@ -89,7 +89,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   }
 };
 
-void ble_init() {
+void init_ble() {
  
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();  //create new scan
