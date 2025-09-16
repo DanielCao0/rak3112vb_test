@@ -19,6 +19,26 @@
 #include "rak1904.h"
 #include <U8g2lib.h>	
 #include "l76k.h"
+#include "lcd.h"    // 添加LCD支持
+#include <Adafruit_GFX.h>			// Click here to get the library: http://librarymanager/All#Adafruit_GFX
+#include <Adafruit_ST7789.h>	// Click here to get the library: http://librarymanager/All#Adafruit_ST7789
+#include <./Fonts/FreeSerif9pt7b.h>  // Font file, you can include your favorite fonts.
+#include <SPI.h>
+
+
+#define CS            12
+#define BL            41
+#define RST           -1
+#define DC            42
+#define BUZZER        38    // PWM蜂鸣器引脚
+
+// SPI3 pin definitions for ESP32-S3 (customize these according to your hardware)
+#define SPI3_SCLK     13   // ESP32-S3 default FSPI SCLK
+#define SPI3_MISO     10   // ESP32-S3 default FSPI MISO  
+#define SPI3_MOSI     11   // ESP32-S3 default FSPI MOSI
+#define SPI3_CS       -1    // ESP32-S3 default FSPI CS
+
+SPIClass* spi3;
 
 // Version information
 #define FIRMWARE_VERSION "1.0.0"
@@ -26,7 +46,6 @@
 #define BUILD_TIME __TIME__
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
-
 
 void init_rak1921()
 {
@@ -37,8 +56,31 @@ void init_rak1921()
   u8g2.sendBuffer();                     // transfer internal memory to the display
 }
 
+// 蜂鸣器初始化和响声函数
+void init_buzzer()
+{
+  pinMode(BUZZER, OUTPUT);
+  digitalWrite(BUZZER, LOW);  // 初始状态为低电平
+}
+
+void buzzer_beep(int frequency, int duration)
+{
+  // 使用tone函数产生PWM音调
+  tone(BUZZER, frequency, duration);
+  delay(duration);
+  noTone(BUZZER);  // 停止音调
+}
+
+void startup_beep()
+{
+  // 开机提示音：1000Hz，持续200ms
+  buzzer_beep(1000, 200);
+  Serial.println("Startup beep completed");
+}
 
 void wifiScan(void);
+
+
 void handle_at_wifiscan(const AT_Command *cmd)
 {
   wifiScan();
@@ -73,6 +115,9 @@ void setupBoards(void)
 
   SPI.begin(RADIO_SCLK_PIN, RADIO_MISO_PIN, RADIO_MOSI_PIN);
 
+  // Initialize SPI3
+  // init_spi3();
+
   Serial.println("init done .");
 
   //Set WiFi to station mode and disconnect from an AP if it was previously connected.
@@ -90,12 +135,20 @@ void setupBoards(void)
 void setup()
 {
   setupBoards();
+  init_buzzer();   // 初始化蜂鸣器
   init_lora_radio();
   init_command();
   init_ble();
   init_rak1904();  // Initialize RAK1904 accelerometer
   init_rak1921();
   init_gps();
+  init_lcd();      // 初始化LCD显示屏
+
+  pinMode(BL, OUTPUT);
+  digitalWrite(BL, HIGH); // Enable the backlight, you can also adjust the backlight brightness through PWM.
+  
+  // 开机响一声
+  startup_beep();
 }
 
 
@@ -104,6 +157,7 @@ void loop()
   receive_packet();
   fhss_auto_hop_send_loop();
   gpsParseDate();
+  test_lcd_touch();
   delay(10);
 }
 
