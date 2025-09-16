@@ -35,7 +35,7 @@ void init_rak1904() {
 
     if (rak1904.begin() != 0)
 	{
-		Serial.println("Problem starting the sensor at 0x18.");
+		//Serial.println("Problem starting the sensor at 0x18.");
 		rak1904_initialized = false;  // 标记初始化失败
 	}
 	else
