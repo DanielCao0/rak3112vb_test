@@ -21,7 +21,7 @@ size_t fhss_channel_idx = 0;
 
 
 #ifndef CONFIG_RADIO_FREQ
-#define CONFIG_RADIO_FREQ           868.0
+#define CONFIG_RADIO_FREQ           915.0
 #endif
 
 #ifndef CONFIG_RADIO_OUTPUT_POWER
@@ -50,6 +50,29 @@ float g_lora_freq = CONFIG_RADIO_FREQ;
 int g_lora_sf = 10;
 int g_lora_power = CONFIG_RADIO_OUTPUT_POWER;
 int g_lora_preamble = 8; // add global variable
+
+// Global radio mode variable (0=LoRa, 1=FSK)
+int g_radio_mode = RADIO_MODE_LORA;
+
+// FSK configuration
+#ifndef CONFIG_FSK_FREQ
+#define CONFIG_FSK_FREQ 915.0
+#endif
+#ifndef CONFIG_FSK_POWER
+#define CONFIG_FSK_POWER 22
+#endif
+#ifndef CONFIG_FSK_BITRATE
+#define CONFIG_FSK_BITRATE 50000
+#endif
+#ifndef CONFIG_FSK_DEVIATION
+#define CONFIG_FSK_DEVIATION 25000
+#endif
+
+static FSK_Config fsk_config = {CONFIG_FSK_FREQ, CONFIG_FSK_POWER, CONFIG_FSK_BITRATE, CONFIG_FSK_DEVIATION};
+static bool fsk_initialized = false;
+
+// Shared bandwidth variable
+float g_bandwidth = CONFIG_RADIO_BW;
 
 // 跳频参数和信道表
 static float fh_start_freq = 902.3;
@@ -119,7 +142,10 @@ void init_lora_radio() {
     register_at_handler("AT+PFREQ", handle_at_freq, "Set/query LoRa frequency, e.g. AT+PFREQ=868.0 or AT+PFREQ=?");
     register_at_handler("AT+PSF", handle_at_sf, "Set/query LoRa spreading factor, e.g. AT+PSF=10 or AT+PSF=?");
     register_at_handler("AT+PTP", handle_at_power, "Set/query LoRa output power, e.g. AT+PTP=22 or AT+PTP=?");
-    register_at_handler("AT+PSEND", handle_at_send, "Send data, e.g. AT+PSEND=hello or AT+PSEND=112233");
+    register_at_handler("AT+PSEND", handle_at_send, "Send data in P2P mode, e.g. AT+PSEND=hello or AT+PSEND=112233");
+    register_at_handler("AT+PBW", handle_at_bandwidth, "Set/query bandwidth, e.g. AT+PBW=125 or AT+PBW=?");
+    register_at_handler("AT+PBR", handle_at_fsk_bitrate, "Set/query FSK bitrate (600-300000 b/s), e.g. AT+PBR=50000 or AT+PBR=?");
+    register_at_handler("AT+PFDEV", handle_at_fsk_deviation, "Set/query FSK frequency deviation, e.g. AT+PFDEV=25000 or AT+PFDEV=?");
     register_at_handler("AT+CW", handle_at_cw, "Start LoRa continuous wave (single carrier)");
     register_at_handler("AT+CWSTOP", handle_at_cw_stop, "Stop LoRa continuous wave (single carrier)");
     register_at_handler("AT+PPL", handle_at_preamble, "Set/query LoRa preamble length, e.g. AT+PPL=8 or AT+PPL=?");
@@ -127,6 +153,10 @@ void init_lora_radio() {
     register_at_handler("AT+PRECV", handle_at_rx, "Start LoRa receive mode");
     register_at_handler("AT+RXSTOP", handle_at_rx_stop, "Stop LoRa receive mode");
     register_at_handler("AT+FHSET", handle_at_fhset, "Set/query FHSS params: AT+FHSET=start,end,step,bw,num e.g. AT+FHSET=902.3,914.9,0.2,125,64 or AT+FHSET=?");
+
+    // Register FSK and MODE AT commands
+    register_at_handler("AT+FSKSEND", handle_at_fsk_send, "Send FSK packet, e.g. AT+FSKSEND=433.92,HELLO or AT+FSKSEND=HELLO");
+    register_at_handler("AT+MODE", handle_at_mode, "Set/query radio mode, e.g. AT+MODE=1 (FSK) or AT+MODE=0 (LoRa) or AT+MODE=?");
 
     // initialize radio with default settings
     int state = radio.begin();
@@ -151,7 +181,7 @@ void init_lora_radio() {
         while (true);
     }
 
-    if (radio.setBandwidth(CONFIG_RADIO_BW) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
+    if (radio.setBandwidth(g_bandwidth) == RADIOLIB_ERR_INVALID_BANDWIDTH) {
         Serial.println(F("Selected bandwidth is invalid for this module!"));
         while (true);
     }
@@ -221,15 +251,31 @@ volatile enum LoraState {
 void handle_at_freq(const AT_Command *cmd) {
     if (strcmp(cmd->params, "?") == 0) {
         Serial.print("Current FREQ: ");
-        Serial.println(g_lora_freq, 3);
+        if (g_radio_mode == RADIO_MODE_FSK) {
+            Serial.println(fsk_config.freq, 3);
+        } else {
+            Serial.println(g_lora_freq, 3);
+        }
         return;
     }
+    
     float freq = atof(cmd->params);
     if (freq >= 137.0 && freq <= 960.0) {
-        g_lora_freq = freq;
-        radio.setFrequency(g_lora_freq);
-        Serial.print("OK, FREQ=");
-        Serial.println(g_lora_freq, 3);
+        if (g_radio_mode == RADIO_MODE_FSK) {
+            // Set FSK frequency
+            fsk_config.freq = freq;
+            if (fsk_initialized) {
+                radio.setFrequency(freq);
+            }
+            Serial.print("OK, FSK FREQ=");
+            Serial.println(fsk_config.freq, 3);
+        } else {
+            // Set LoRa frequency
+            g_lora_freq = freq;
+            radio.setFrequency(g_lora_freq);
+            Serial.print("OK, LoRa FREQ=");
+            Serial.println(g_lora_freq, 3);
+        }
     } else {
         Serial.println("ERROR: Invalid FREQ");
     }
@@ -255,21 +301,43 @@ void handle_at_sf(const AT_Command *cmd) {
 void handle_at_power(const AT_Command *cmd) {
     if (strcmp(cmd->params, "?") == 0) {
         Serial.print("Current POWER: ");
-        Serial.println(g_lora_power);
+        if (g_radio_mode == RADIO_MODE_FSK) {
+            Serial.println(fsk_config.power);
+        } else {
+            Serial.println(g_lora_power);
+        }
         return;
     }
+    
     int power = atoi(cmd->params);
     if (power >= -9 && power <= 22) {
-        g_lora_power = power;
-        radio.setOutputPower(g_lora_power);
-        Serial.print("OK, POWER=");
-        Serial.println(g_lora_power);
+        if (g_radio_mode == RADIO_MODE_FSK) {
+            // Set FSK power
+            fsk_config.power = power;
+            if (fsk_initialized) {
+                radio.setOutputPower(fsk_config.power);
+            }
+            Serial.print("OK, FSK POWER=");
+            Serial.println(fsk_config.power);
+        } else {
+            // Set LoRa power
+            g_lora_power = power;
+            radio.setOutputPower(g_lora_power);
+            Serial.print("OK, LoRa POWER=");
+            Serial.println(g_lora_power);
+        }
     } else {
         Serial.println("ERROR: Invalid POWER");
     }
 }
 
 void handle_at_send(const AT_Command *cmd) {
+    // if (g_radio_mode == RADIO_MODE_FSK) {
+    //     // Forward to FSK send if in FSK mode
+    //     handle_at_fsk_send(cmd);
+    //     return;
+    // }
+    
     if (lora_state == LORA_CW) {
         Serial.println("ERROR: Device busy (CW mode)");
         return;
@@ -305,15 +373,6 @@ void handle_at_send(const AT_Command *cmd) {
         int state = radio.startTransmit(buf, byteLen);
         if (state == RADIOLIB_ERR_NONE) {
             Serial.println("OK");
-            // unsigned long start = millis();
-            // while (!transmittedFlag && millis() - start < 5000) {
-            //     delay(1);
-            // }
-            // if (transmittedFlag) {
-            //     Serial.println("SEND DONE");
-            // } else {
-            //     Serial.println("ERROR: Timeout waiting for TX done");
-            // }
         } else {
             Serial.print("ERROR, code ");
             Serial.println(state);
@@ -321,19 +380,9 @@ void handle_at_send(const AT_Command *cmd) {
     } else {
         // Fallback: send as string
         transmittedFlag = false;
-        //radio.setPacketSentAction(setFlag);
         int state = radio.startTransmit(cmd->params);
         if (state == RADIOLIB_ERR_NONE) {
             Serial.println("OK, sending...");
-            // unsigned long start = millis();
-            // while (!transmittedFlag && millis() - start < 5000) {
-            //     delay(1);
-            // }
-            // if (transmittedFlag) {
-            //     Serial.println("SEND DONE");
-            // } else {
-            //     Serial.println("ERROR: Timeout waiting for TX done");
-            // }
         } else {
             Serial.print("ERROR, code ");
             Serial.println(state);
@@ -514,5 +563,201 @@ void fhss_auto_hop_send_loop() {
         }
         fhss_channel_idx++;
         fhss_last_hop = now;
+    }
+}
+
+// ============= FSK Functions =============
+
+void init_fsk_radio() {
+    if (fsk_initialized) return;
+    
+    int state = radio.beginFSK();
+    Serial.print(F("FSK Radio Initializing ... "));
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println(F("success!"));
+        fsk_initialized = true;
+    } else {
+        Serial.print(F("failed, code "));
+        Serial.println(state);
+        return;
+    }
+    radio.setFrequency(fsk_config.freq);
+    radio.setOutputPower(fsk_config.power);
+    radio.setBitRate(fsk_config.bitrate);
+    radio.setFrequencyDeviation(fsk_config.deviation);
+    radio.setCRC(true);
+}
+
+void set_fsk_freq(float freq) {
+    fsk_config.freq = freq;
+    if (g_radio_mode == RADIO_MODE_FSK && fsk_initialized) {
+        radio.setFrequency(freq);
+    }
+}
+
+int fsk_send_packet(const char* data, int len) {
+    if (g_radio_mode != RADIO_MODE_FSK) {
+        return -1; // Wrong mode
+    }
+    if (!fsk_initialized) {
+        return -2; // Not initialized
+    }
+    return radio.transmit((uint8_t*)data, len);
+}
+
+// AT+FSKSEND=433.92,HELLO or AT+FSKSEND=HELLO (use default freq)
+void handle_at_fsk_send(const AT_Command *cmd) {
+    if (g_radio_mode != RADIO_MODE_FSK) {
+        Serial.println("ERROR: Not in FSK mode, use AT+MODE=1 first");
+        return;
+    }
+    
+    char buf[128];
+    strncpy(buf, cmd->params, sizeof(buf)-1);
+    buf[sizeof(buf)-1] = 0;
+    char *comma = strchr(buf, ',');
+    float freq = fsk_config.freq;
+    const char* data = buf;
+    if (comma) {
+        *comma = 0;
+        freq = atof(buf);
+        data = comma + 1;
+        set_fsk_freq(freq);
+    }
+    if (strlen(data) == 0) {
+        Serial.println("ERROR: No data to send");
+        return;
+    }
+    int state = fsk_send_packet(data, strlen(data));
+    if (state == RADIOLIB_ERR_NONE) {
+        Serial.println("FSK SEND OK");
+    } else if (state == -1) {
+        Serial.println("ERROR: Not in FSK mode");
+    } else if (state == -2) {
+        Serial.println("ERROR: FSK not initialized");
+    } else {
+        Serial.print("FSK SEND ERROR, code ");
+        Serial.println(state);
+    }
+}
+
+// AT+MODE=0 (LoRa) or AT+MODE=1 (FSK) or AT+MODE=? (query)
+void handle_at_mode(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current MODE: ");
+        Serial.print(g_radio_mode);
+        Serial.println(g_radio_mode == RADIO_MODE_LORA ? " (LoRa)" : " (FSK)");
+        return;
+    }
+    
+    int mode = atoi(cmd->params);
+    if (mode == RADIO_MODE_LORA) {
+        g_radio_mode = RADIO_MODE_LORA;
+        fsk_initialized = false; // Reset FSK state
+        // Re-initialize LoRa mode
+        init_lora_radio();
+        Serial.println("OK, MODE=0 (LoRa)");
+    } else if (mode == RADIO_MODE_FSK) {
+        g_radio_mode = RADIO_MODE_FSK;
+        init_fsk_radio();
+        Serial.println("OK, MODE=1 (FSK)");
+    } else {
+        Serial.println("ERROR: Invalid MODE (0=LoRa, 1=FSK)");
+    }
+}
+
+// ============= Shared Functions =============
+
+// AT+PBW=125 or AT+PBW=? (bandwidth for both LoRa and FSK)
+void handle_at_bandwidth(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current BW: ");
+        Serial.println(g_bandwidth, 1);
+        return;
+    }
+    
+    float bw = atof(cmd->params);
+    if (g_radio_mode == RADIO_MODE_LORA) {
+        // LoRa bandwidth: 7.8, 10.4, 15.6, 20.8, 31.25, 41.7, 62.5, 125, 250, 500
+        if (bw == 7.8 || bw == 10.4 || bw == 15.6 || bw == 20.8 || 
+            bw == 31.25 || bw == 41.7 || bw == 62.5 || bw == 125 || 
+            bw == 250 || bw == 500) {
+            g_bandwidth = bw;
+            if (radio.setBandwidth(g_bandwidth) == RADIOLIB_ERR_NONE) {
+                Serial.print("OK, LoRa BW=");
+                Serial.println(g_bandwidth, 1);
+            } else {
+                Serial.println("ERROR: Failed to set LoRa bandwidth");
+            }
+        } else {
+            Serial.println("ERROR: Invalid LoRa BW (7.8,10.4,15.6,20.8,31.25,41.7,62.5,125,250,500)");
+        }
+    } else if (g_radio_mode == RADIO_MODE_FSK) {
+        // FSK bandwidth: 4800-467000 Hz
+        if (bw >= 4800 && bw <= 467000) {
+            g_bandwidth = bw;
+            if (fsk_initialized && radio.setRxBandwidth(g_bandwidth) == RADIOLIB_ERR_NONE) {
+                Serial.print("OK, FSK BW=");
+                Serial.println(g_bandwidth, 1);
+            } else {
+                Serial.println("ERROR: Failed to set FSK bandwidth or FSK not initialized");
+            }
+        } else {
+            Serial.println("ERROR: Invalid FSK BW (4800-467000 Hz)");
+        }
+    }
+}
+
+// AT+PBR=50000 or AT+PBR=? (FSK bitrate)
+void handle_at_fsk_bitrate(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current FSK bitrate: ");
+        Serial.println(fsk_config.bitrate);
+        return;
+    }
+    
+    int bitrate = atoi(cmd->params);
+    if (bitrate >= 600 && bitrate <= 300000) {
+        fsk_config.bitrate = bitrate;
+        if (g_radio_mode == RADIO_MODE_FSK && fsk_initialized) {
+            if (radio.setBitRate(fsk_config.bitrate) == RADIOLIB_ERR_NONE) {
+                Serial.print("OK, FSK bitrate=");
+                Serial.println(fsk_config.bitrate);
+            } else {
+                Serial.println("ERROR: Failed to set FSK bitrate");
+            }
+        } else {
+            Serial.print("OK, FSK bitrate=");
+            Serial.println(fsk_config.bitrate);
+        }
+    } else {
+        Serial.println("ERROR: Invalid FSK bitrate (600-300000 b/s)");
+    }
+}
+
+// AT+PFDEV=25000 or AT+PFDEV=? (FSK frequency deviation)
+void handle_at_fsk_deviation(const AT_Command *cmd) {
+    if (strcmp(cmd->params, "?") == 0) {
+        Serial.print("Current FSK frequency deviation: ");
+        Serial.println(fsk_config.deviation);
+        return;
+    }
+    
+    int deviation = atoi(cmd->params);
+    if (deviation >= 600 && deviation <= 200000) {
+        fsk_config.deviation = deviation;
+        if (g_radio_mode == RADIO_MODE_FSK && fsk_initialized) {
+            if (radio.setFrequencyDeviation(fsk_config.deviation) == RADIOLIB_ERR_NONE) {
+                Serial.print("OK, FSK deviation=");
+                Serial.println(fsk_config.deviation);
+            } else {
+                Serial.println("ERROR: Failed to set FSK deviation");
+            }
+        } else {
+            Serial.print("OK, FSK deviation=");
+            Serial.println(fsk_config.deviation);
+        }
+    } else {
+        Serial.println("ERROR: Invalid FSK deviation (600-200000 Hz)");
     }
 }

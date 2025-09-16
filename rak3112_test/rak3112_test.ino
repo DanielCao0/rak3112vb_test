@@ -20,6 +20,11 @@
 #include <U8g2lib.h>	
 #include "l76k.h"
 
+// Version information
+#define FIRMWARE_VERSION "1.0.0"
+#define BUILD_DATE __DATE__
+#define BUILD_TIME __TIME__
+
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 
 
@@ -37,6 +42,20 @@ void wifiScan(void);
 void handle_at_wifiscan(const AT_Command *cmd)
 {
   wifiScan();
+}
+
+void handle_at_version(const AT_Command *cmd)
+{
+  Serial.print("Firmware Version: ");
+  Serial.println(FIRMWARE_VERSION);
+  Serial.print("Build Date: ");
+  Serial.println(BUILD_DATE);
+  Serial.print("Build Time: ");
+  Serial.println(BUILD_TIME);
+  Serial.print("Hardware: RAK3112");
+  Serial.println();
+  Serial.print("RadioLib: SX1262 LoRa/FSK Module");
+  Serial.println();
 }
 
 void setupBoards(void)
@@ -61,6 +80,8 @@ void setupBoards(void)
   WiFi.disconnect();
   delay(100);
   register_at_handler("AT+WIFISCAN", handle_at_wifiscan, "Scan WiFi networks");
+  register_at_handler("AT+VER", handle_at_version, "Query firmware version information");
+  register_at_handler("AT+VERSION", handle_at_version, "Query firmware version information");
 
   // esp_log_level_set("*", ESP_LOG_ERROR);          // 只显示错误级别
   esp_log_level_set("i2c.master", ESP_LOG_NONE);  // 完全关闭I2C日志
