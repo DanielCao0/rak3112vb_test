@@ -3,7 +3,7 @@
 #include <Arduino.h>
 
 
-#define MAX_HANDLER_NUM 32
+#define MAX_HANDLER_NUM 1024
 
 AT_HandlerTable handler_table[MAX_HANDLER_NUM];
 int handler_table_size = 0;
@@ -161,6 +161,6 @@ void atCmd(void *parameter)
 			process_serial_input(received);
 		}
 
-        delay(10);
+        delay(1);
 	}
 }
