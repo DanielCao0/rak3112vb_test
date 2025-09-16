@@ -3,12 +3,21 @@
 
 #include <LovyanGFX.hpp>
 #include <Wire.h>
+#include <SPI.h>
 
 // 蜂鸣器引脚定义
 #define BUZZER        38
 
+// SPI3引脚定义
+#define SPI3_SCLK     13
+#define SPI3_MISO     10  
+#define SPI3_MOSI     11
+
 // 蜂鸣器函数声明（在主程序中实现）
 extern void buzzer_beep(int frequency, int duration);
+
+// 全局SPI3对象声明（在lcd.cpp中定义）
+extern SPIClass spi3;
 
 // LCD显示屏控制类
 class LGFX : public lgfx::LGFX_Device

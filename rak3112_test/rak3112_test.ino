@@ -20,6 +20,7 @@
 #include <U8g2lib.h>	
 #include "l76k.h"
 #include "lcd.h"    // 添加LCD支持
+#include "sdcard.h" // 添加SD卡支持
 #include <Adafruit_GFX.h>			// Click here to get the library: http://librarymanager/All#Adafruit_GFX
 #include <Adafruit_ST7789.h>	// Click here to get the library: http://librarymanager/All#Adafruit_ST7789
 #include <./Fonts/FreeSerif9pt7b.h>  // Font file, you can include your favorite fonts.
@@ -31,14 +32,6 @@
 #define RST           -1
 #define DC            42
 #define BUZZER        38    // PWM蜂鸣器引脚
-
-// SPI3 pin definitions for ESP32-S3 (customize these according to your hardware)
-#define SPI3_SCLK     13   // ESP32-S3 default FSPI SCLK
-#define SPI3_MISO     10   // ESP32-S3 default FSPI MISO  
-#define SPI3_MOSI     11   // ESP32-S3 default FSPI MOSI
-#define SPI3_CS       -1    // ESP32-S3 default FSPI CS
-
-SPIClass* spi3;
 
 // Version information
 #define FIRMWARE_VERSION "1.0.0"
@@ -100,6 +93,12 @@ void handle_at_version(const AT_Command *cmd)
   Serial.println();
 }
 
+void handle_at_sd(const AT_Command *cmd)
+{
+  Serial.println("Starting SD card test...");
+  test_sdcard();
+}
+
 void setupBoards(void)
 {
   Serial.begin(115200);
@@ -127,6 +126,7 @@ void setupBoards(void)
   register_at_handler("AT+WIFISCAN", handle_at_wifiscan, "Scan WiFi networks");
   register_at_handler("AT+VER", handle_at_version, "Query firmware version information");
   register_at_handler("AT+VERSION", handle_at_version, "Query firmware version information");
+  register_at_handler("AT+SD", handle_at_sd, "Test SD card read/write operations");
 
   // esp_log_level_set("*", ESP_LOG_ERROR);          // 只显示错误级别
   esp_log_level_set("i2c.master", ESP_LOG_NONE);  // 完全关闭I2C日志
@@ -142,7 +142,8 @@ void setup()
   init_rak1904();  // Initialize RAK1904 accelerometer
   init_rak1921();
   init_gps();
-  init_lcd();      // 初始化LCD显示屏
+  init_lcd();      // 初始化LCD显示屏 (配置SPI3总线)
+  init_sdcard();   // 初始化SD卡 (重用LCD的SPI3总线)
 
   pinMode(BL, OUTPUT);
   digitalWrite(BL, HIGH); // Enable the backlight, you can also adjust the backlight brightness through PWM.

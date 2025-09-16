@@ -73,9 +73,7 @@ LGFX::LGFX(void)
 // LCD初始化函数
 void init_lcd()
 {
-  Serial.println("Initializing LCD...");
-  
-  // 电源控制引脚
+  // 电源控制引脚 
   pinMode(14, OUTPUT);
   digitalWrite(14, HIGH);  // 打开电源
 
@@ -103,7 +101,7 @@ void init_lcd()
   tft.setCursor(msg_x, msg_y);
   tft.print(msg);
   
-  Serial.println("LCD initialized successfully");
+  Serial.println("LCD initialized successfully on SPI3");
 }
 
 // LCD显示文本函数
