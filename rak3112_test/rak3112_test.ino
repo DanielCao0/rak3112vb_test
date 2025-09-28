@@ -40,6 +40,8 @@
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 
+void check_button();
+
 void init_rak1921()
 {
   u8g2.begin();
@@ -130,6 +132,9 @@ void setupBoards(void)
 
   // esp_log_level_set("*", ESP_LOG_ERROR);          // 只显示错误级别
   esp_log_level_set("i2c.master", ESP_LOG_NONE);  // 完全关闭I2C日志
+
+  // 按钮引脚初始化（0脚位，输入上拉）
+  pinMode(0, INPUT_PULLUP);
 }
 
 void setup()
@@ -235,4 +240,14 @@ void wifiScan()
 }
 
 
-
+// 按钮检测函数，需在主循环调用
+void check_button()
+{
+  static bool lastPressed = false;
+  bool pressed = digitalRead(0) == LOW; // 按下为低电平
+  if (pressed && !lastPressed) {
+    startup_beep();
+    Serial.println("BUTTON TEST OK");
+  }
+  lastPressed = pressed;
+}

@@ -88,19 +88,22 @@ void init_lcd()
   // 初始化LCD
   tft.init();
   
-  // 设置默认显示
+  // 开机依次显示红、绿、蓝三原色，每种1秒
+  tft.fillScreen(TFT_RED);
+  delay(1000);
+  tft.fillScreen(TFT_GREEN);
+  delay(1000);
   tft.fillScreen(TFT_BLUE);
+  delay(1000);
+  // 设置默认显示
   tft.setFont(font_touch);
   tft.setTextColor(TFT_WHITE, TFT_BLUE);
-  
   // 显示初始化信息
   String msg = "RAK3112 LCD Ready";
   int16_t msg_x = (tft.width() - tft.textWidth(msg.c_str())) / 2;
   int16_t msg_y = (tft.height() - tft.fontHeight()) / 2;
-  
   tft.setCursor(msg_x, msg_y);
   tft.print(msg);
-  
   Serial.println("LCD initialized successfully on SPI3");
 }
 
@@ -126,7 +129,7 @@ void test_lcd_touch()
   int16_t x = -1, y = -1;
 
   // 颜色数组，每次变化切换一种
-  const uint16_t colors[] = {TFT_RED, TFT_GREEN, TFT_BLUE, TFT_CYAN, TFT_MAGENTA, TFT_YELLOW, TFT_BLACK, TFT_WHITE};
+  const uint16_t colors[] = {TFT_RED, TFT_GREEN, TFT_BLUE};
   const int colorCount = sizeof(colors) / sizeof(colors[0]);
   static int colorIndex = 0;
 
@@ -180,3 +183,5 @@ void test_lcd_touch()
   // 更新上次触摸状态
   last_touched = touched;
 }
+
+
