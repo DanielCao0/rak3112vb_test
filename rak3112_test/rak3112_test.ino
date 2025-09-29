@@ -164,6 +164,7 @@ void loop()
   fhss_auto_hop_send_loop();
   gpsParseDate();
   test_lcd_touch();
+  check_button();
   delay(10);
 }
 
