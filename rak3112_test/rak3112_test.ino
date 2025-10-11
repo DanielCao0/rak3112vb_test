@@ -101,6 +101,56 @@ void handle_at_sd(const AT_Command *cmd)
   test_sdcard();
 }
 
+void handle_at_bat(const AT_Command *cmd)
+{
+  // GPIO1用于电池电压监测 (根据提供的分压电路图)
+  const int BAT_PIN = 1;              // ADC_VBAT连接的GPIO引脚
+  const float R3 = 1.0;               // 1M欧姆 (上拉电阻)
+  const float R4 = 1.5;               // 1.5M欧姆 (下拉电阻)
+  const float VOLTAGE_DIVIDER_RATIO = R4 / (R3 + R4);  // 1.5/(1+1.5) = 0.6
+  const float ADC_REF_VOLTAGE = 3.3;  // ESP32-S3参考电压
+  const int ADC_RESOLUTION = 4095;    // 12位ADC
+  
+  // 配置ADC引脚
+  pinMode(BAT_PIN, INPUT);
+  
+  // 多次采样求平均值，提高精度
+  int adcSum = 0;
+  const int sampleCount = 10;
+  for (int i = 0; i < sampleCount; i++) {
+    adcSum += analogRead(BAT_PIN);
+    delay(10);  // 短暂延迟
+  }
+  int adcValue = adcSum / sampleCount;
+  
+  // 计算ADC测得的电压 (分压后的电压)
+  float adcVoltage = (adcValue * ADC_REF_VOLTAGE) / ADC_RESOLUTION + 0.12;  // 校准偏差0.12V
+  
+  // 根据分压电路计算实际电池电压
+  // VBAT = ADC_Voltage / VOLTAGE_DIVIDER_RATIO
+  float batteryVoltage = adcVoltage / VOLTAGE_DIVIDER_RATIO;
+  
+  // 输出结果
+  Serial.printf("Battery Voltage: %.3f V\n", batteryVoltage);
+  Serial.printf("ADC Voltage: %.3f V (after voltage divider)\n", adcVoltage);
+  Serial.printf("ADC Raw Value: %d (avg of %d samples)\n", adcValue, sampleCount);
+  Serial.printf("Voltage Divider Ratio: %.2f (R4/(R3+R4))\n", VOLTAGE_DIVIDER_RATIO);
+  Serial.printf("ADC Pin: GPIO%d\n", BAT_PIN);
+  
+  // 电池状态判断
+  if (batteryVoltage >= 4.0) {
+    Serial.println("Battery Status: FULL (>= 4.0V)");
+  } else if (batteryVoltage >= 3.7) {
+    Serial.println("Battery Status: GOOD (3.7V - 4.0V)");
+  } else if (batteryVoltage >= 3.4) {
+    Serial.println("Battery Status: LOW (3.4V - 3.7V)");
+  } else if (batteryVoltage >= 3.0) {
+    Serial.println("Battery Status: CRITICAL (3.0V - 3.4V)");
+  } else {
+    Serial.println("Battery Status: EMPTY (< 3.0V)");
+  }
+}
+
 void setupBoards(void)
 {
   Serial.begin(115200);
@@ -129,6 +179,7 @@ void setupBoards(void)
   register_at_handler("AT+VER", handle_at_version, "Query firmware version information");
   register_at_handler("AT+VERSION", handle_at_version, "Query firmware version information");
   register_at_handler("AT+SD", handle_at_sd, "Test SD card read/write operations");
+  register_at_handler("AT+BAT", handle_at_bat, "Read battery voltage from GPIO1");
 
   // esp_log_level_set("*", ESP_LOG_ERROR);          // 只显示错误级别
   esp_log_level_set("i2c.master", ESP_LOG_NONE);  // 完全关闭I2C日志
